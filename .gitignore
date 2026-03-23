@@ -1,0 +1,15 @@
+mpc/build/
+libOTe/out/
+*.o
+*.a
+*.so
+*.out
+*.log
+*.tmp
+*.swp
+.idea/
+.vscode/
+*.rand
+.github
+libOte.txt
+mpc.txt

@@ -1,0 +1,18 @@
+------------------------------------------------------------------------------------------------------------------
+---------------------------------------------| CHANGES TO INCORPORATE LIBOTE |------------------------------------
+------------------------------------------------------------------------------------------------------------------
+1) Separate socket for OT
+We keep OT traffic on its own TCP connection so the main MPC channel stays alive and in a consistent state. Reusing the same socket was failing because it was moved twice (into NetPeer and into OT), and multiplexing two independent protocols on one raw socket would require framing; a dedicated socket avoids double-move/EOF issues and keeps protocols isolated.
+
+2) OT on a different thread
+coproto::sync_wait used in run_simplest_ot_* is blocking. If you run it on the same thread as io_context.run(), you stop the event loop and no async reads/writes progress, causing a deadlock/EOF. Moving OT to a worker thread lets the io_context keep servicing sockets while OT runs.
+
+3) Overheads / advantages; blocking vs async
+Overheads: one extra TCP connection and one extra thread. Advantages: protocol isolation, simpler logic (no framing/multiplexing), no event-loop stalls. In this code, OT calls are blocking because we invoke the async OT API via sync_wait; you could make them fully async by awaiting the coproto operations instead of sync_wait.
+
+4) Why convert to AsioSocket
+SimplestOT in libOTe expects a coproto::Socket interface; coproto::AsioSocket wraps a tcp::socket to satisfy that interface. Without wrapping, you can’t pass a Boost.Asio socket into the OT API.
+
+------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------
+------------------------------------------------------------------------------------------------------------------
