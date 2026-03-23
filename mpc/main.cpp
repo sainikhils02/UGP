@@ -100,7 +100,7 @@ awaitable<void> run_p0(io_context& io) {
     tcp::socket ot_sock = co_await accept_on(io, 12000);
     OTManager ot(std::move(ot_sock));
 
-    // Phase 1: run 2 OTs
+    // OT sender functions usage
     osuCrypto::PRNG prng(osuCrypto::sysRandomSeed());
     std::vector<std::array<osuCrypto::block,2>> msgs(128);
     for (auto& m : msgs) {
@@ -110,13 +110,13 @@ awaitable<void> run_p0(io_context& io) {
     auto fut1 = ot.send_batch(128, msgs);
     co_await await_future(io, fut1);
 
-    std::vector<std::array<osuCrypto::block,2>> msgs2(128);
-    for (auto& m : msgs2) {
-        m[0] = prng.get<osuCrypto::block>();
-        m[1] = prng.get<osuCrypto::block>();
-    }
-    auto fut2 = ot.send_batch(128, msgs2);
-    co_await await_future(io, fut2);
+    // std::vector<std::array<osuCrypto::block,2>> msgs2(128);
+    // for (auto& m : msgs2) {
+    //     m[0] = prng.get<osuCrypto::block>();
+    //     m[1] = prng.get<osuCrypto::block>();
+    // }
+    // auto fut2 = ot.send_batch(128, msgs2);
+    // co_await await_future(io, fut2);
 
     MPCContext ctx(Role::P0, self, &peer, nullptr);
 
@@ -146,19 +146,19 @@ awaitable<void> run_p1(io_context& io) {
     tcp::socket ot_sock = co_await connect_with_retry(io, "127.0.0.1", 12000);
     OTManager ot(std::move(ot_sock));
 
-    // Phase 1: match P0's 2 sends
+    // // OT receiver functions usage
     osuCrypto::BitVector choices(128);
     osuCrypto::PRNG prng(osuCrypto::sysRandomSeed());
     choices.randomize(prng);
     std::vector<osuCrypto::block> outputs(128);
-    auto fut1 = ot.recv_batch(128, choices, outputs);
-    co_await await_future(io, fut1);
+    auto fut1 = ot.recv_batch(128, choices, outputs);  
+    outputs = co_await await_future(io, fut1);
 
-    osuCrypto::BitVector choices2(128);
-    choices.randomize(prng);
-    std::vector<osuCrypto::block> outputs2(128);
-    auto fut2 = ot.recv_batch(128, choices2, outputs2);
-    co_await await_future(io, fut2);
+    // osuCrypto::BitVector choices2(128);
+    // choices.randomize(prng);
+    // std::vector<osuCrypto::block> outputs2(128);
+    // auto fut2 = ot.recv_batch(128, choices2, outputs2);
+    // co_await await_future(io, fut2);
 
     MPCContext ctx(Role::P1, self, &peer, nullptr);
 
