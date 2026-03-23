@@ -3,3 +3,4 @@
 - Build MPC: `cmake -S mpc -B mpc/build && cmake --build mpc/build` (binaries in `mpc/build`: `mpc_async`, `mpcops_test`, `test_shares`, `locoram_test`, `dpf_test`).
 - OT channel: `OTManager` (`mpc/ot_manager.hpp`) wraps a dedicated socket and runs SimplestOT via coproto on a worker thread; schedule with `send_batch`/`recv_batch`, then `await_future(io, fut)` inside the Asio loop.
 - Linking note: `find_package(libOTe REQUIRED COMPONENTS std_20 boost)` then link `oc::libOTe`; if CMake cannot find it, pass `-DCMAKE_PREFIX_PATH=<libOTe build/install>`.
+- To run the OT-sender and receiver functions please find the illustrations in `run_p0` and `run_p1` functions in mpc/main.cpp
