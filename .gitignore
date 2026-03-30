@@ -1,5 +1,5 @@
 mpc/build/
-libOTe/out/
+libOTe/
 *.o
 *.a
 *.so
