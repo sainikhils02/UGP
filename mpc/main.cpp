@@ -21,6 +21,9 @@ using namespace boost::asio::experimental::awaitable_operators;
 using namespace std::chrono_literals;
 using ip::tcp;
 
+const int NUM_ITERS = 50;
+const int WARMUP = 5;
+
 // -----------------------------------------
 // arc4random_buf fallback
 // -----------------------------------------
@@ -100,16 +103,41 @@ awaitable<void> run_p0(io_context& io) {
     tcp::socket ot_sock = co_await accept_on(io, 12000);
     OTManager ot(std::move(ot_sock));
 
+    std::vector<long long> timings;
+
     // OT sender functions usage
     osuCrypto::PRNG prng(osuCrypto::sysRandomSeed());
-    std::vector<std::array<osuCrypto::block,2>> msgs(128);
-    for (auto& m : msgs) {
-        m[0] = prng.get<osuCrypto::block>();
-        m[1] = prng.get<osuCrypto::block>();
-    }
-    auto fut1 = ot.send_batch(128, msgs);
-    co_await await_future(io, fut1);
+    for (int iter = 0; iter < NUM_ITERS; iter++) {
 
+        std::vector<std::array<osuCrypto::block,2>> msgs(128);
+        for (auto& m : msgs) {
+            m[0] = prng.get<osuCrypto::block>();
+            m[1] = prng.get<osuCrypto::block>();
+        }
+        auto start = std::chrono::high_resolution_clock::now();
+
+        auto fut1 = ot.send_batch(128, msgs);
+        co_await await_future(io, fut1);
+
+        auto end = std::chrono::high_resolution_clock::now();
+        long long us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+        if (iter >= WARMUP) timings.push_back(us);
+    }
+    long long sum = 0, mn = LLONG_MAX, mx = 0;
+    for (auto t : timings) {
+        sum += t;
+        mn = std::min(mn, t);
+        mx = std::max(mx, t);
+    }
+
+    std::cout << "[P0] OT Benchmark:\n";
+    std::cout << "Avg: " << (sum / timings.size()) << " us\n";
+    std::cout << "Min: " << mn << " us\n";
+    std::cout << "Max: " << mx << " us\n";
+    std::cout << "Time per OT: "
+          << (sum / timings.size()) / 128.0
+          << " us\n";
     // std::vector<std::array<osuCrypto::block,2>> msgs2(128);
     // for (auto& m : msgs2) {
     //     m[0] = prng.get<osuCrypto::block>();
@@ -147,13 +175,39 @@ awaitable<void> run_p1(io_context& io) {
     OTManager ot(std::move(ot_sock));
 
     // // OT receiver functions usage
-    osuCrypto::BitVector choices(128);
+    
+    std::vector<long long> timings;
     osuCrypto::PRNG prng(osuCrypto::sysRandomSeed());
-    choices.randomize(prng);
-    std::vector<osuCrypto::block> outputs(128);
-    auto fut1 = ot.recv_batch(128, choices, outputs);  
-    outputs = co_await await_future(io, fut1);
+    for (int iter = 0; iter < NUM_ITERS; iter++) {
+        osuCrypto::BitVector choices(128);
+        choices.randomize(prng);
+        std::vector<osuCrypto::block> outputs(128);
 
+        auto start = std::chrono::high_resolution_clock::now();
+
+        auto fut1 = ot.recv_batch(128, choices, outputs);  
+        outputs = co_await await_future(io, fut1);
+
+        auto end = std::chrono::high_resolution_clock::now();
+
+        long long us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+        if (iter >= WARMUP) timings.push_back(us);
+    }
+    long long sum = 0, mn = LLONG_MAX, mx = 0;
+    for (auto t : timings) {
+        sum += t;
+        mn = std::min(mn, t);
+        mx = std::max(mx, t);
+    }
+
+    std::cout << "[P1] OT Benchmark:\n";
+    std::cout << "Avg: " << (sum / timings.size()) << " us\n";
+    std::cout << "Min: " << mn << " us\n";
+    std::cout << "Max: " << mx << " us\n";
+    std::cout << "Time per OT: "
+          << (sum / timings.size()) / 128.0
+          << " us\n";
     // osuCrypto::BitVector choices2(128);
     // choices.randomize(prng);
     // std::vector<osuCrypto::block> outputs2(128);
