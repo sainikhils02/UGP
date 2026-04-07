@@ -60,6 +60,13 @@ add_mpc_executable(mpc_async
 )
 
 # ------------------------------------------------------------------
+# OT benchmark executable
+# ------------------------------------------------------------------
+add_mpc_executable(ot_tests
+    ot_tests.cpp
+)
+
+# ------------------------------------------------------------------
 # Tests
 # ------------------------------------------------------------------
 add_mpc_executable(mpcops_test
@@ -77,4 +84,3 @@ add_mpc_executable(locoram_test
 add_mpc_executable(dpf_test
     dpf_test.cpp
 )
-    

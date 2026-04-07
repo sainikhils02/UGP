@@ -7,52 +7,15 @@
 #include <boost/asio/experimental/awaitable_operators.hpp>
 
 #include <iostream>
-#include <chrono>
-#include <random>
-#include <thread>
 
 #include "network.hpp"
 #include "mpcops.hpp"
 #include "shares.hpp"
-#include "ot_manager.hpp"
 
 using namespace boost::asio;
 using namespace boost::asio::experimental::awaitable_operators;
 using namespace std::chrono_literals;
 using ip::tcp;
-
-const int NUM_ITERS = 50;
-const int WARMUP = 5;
-
-// -----------------------------------------
-// arc4random_buf fallback
-// -----------------------------------------
-// #if !defined(__APPLE__) && (!defined(__GLIBC__) || __GLIBC__ < 2 || __GLIBC_MINOR__ < 36)
-// inline void arc4random_buf(void* buf, size_t n) {
-//     std::random_device rd;
-//     uint8_t* p = static_cast<uint8_t*>(buf);
-//     for (size_t i = 0; i < n; ++i)
-//         p[i] = static_cast<uint8_t>(rd());
-// }
-// #endif
-
-// // -----------------------------------------
-// // Connection helpers
-// // -----------------------------------------
-// awaitable<tcp::socket> connect_with_retry(io_context& io, const std::string& host, uint16_t port) {
-//     tcp::resolver resolver(io);
-//     tcp::socket sock(io);
-//     while (true) {
-//         try {
-//             auto endpoints = co_await resolver.async_resolve(host, std::to_string(port), use_awaitable);
-//             co_await async_connect(sock, endpoints, use_awaitable);
-//             co_return sock;
-//         } catch (...) {
-//             steady_timer t(io, 200ms);
-//             co_await t.async_wait(use_awaitable);
-//         }
-//     }
-// }
 
 awaitable<tcp::socket> accept_on(io_context& io, uint16_t port) {
     tcp::acceptor acc(io, tcp::endpoint(tcp::v4(), port));
@@ -100,52 +63,6 @@ awaitable<void> run_p0(io_context& io) {
     tcp::socket peer_sock = co_await accept_on(io, 9100);
     NetPeer peer(Role::P1, std::move(peer_sock));
 
-    tcp::socket ot_sock = co_await accept_on(io, 12000);
-    OTManager ot(std::move(ot_sock));
-
-    std::vector<long long> timings;
-
-    // OT sender functions usage
-    osuCrypto::PRNG prng(osuCrypto::sysRandomSeed());
-    for (int iter = 0; iter < NUM_ITERS; iter++) {
-
-        std::vector<std::array<osuCrypto::block,2>> msgs(128);
-        for (auto& m : msgs) {
-            m[0] = prng.get<osuCrypto::block>();
-            m[1] = prng.get<osuCrypto::block>();
-        }
-        auto start = std::chrono::high_resolution_clock::now();
-
-        auto fut1 = ot.send_batch(128, msgs);
-        co_await await_future(io, fut1);
-
-        auto end = std::chrono::high_resolution_clock::now();
-        long long us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-
-        if (iter >= WARMUP) timings.push_back(us);
-    }
-    long long sum = 0, mn = LLONG_MAX, mx = 0;
-    for (auto t : timings) {
-        sum += t;
-        mn = std::min(mn, t);
-        mx = std::max(mx, t);
-    }
-
-    std::cout << "[P0] OT Benchmark:\n";
-    std::cout << "Avg: " << (sum / timings.size()) << " us\n";
-    std::cout << "Min: " << mn << " us\n";
-    std::cout << "Max: " << mx << " us\n";
-    std::cout << "Time per OT: "
-          << (sum / timings.size()) / 128.0
-          << " us\n";
-    // std::vector<std::array<osuCrypto::block,2>> msgs2(128);
-    // for (auto& m : msgs2) {
-    //     m[0] = prng.get<osuCrypto::block>();
-    //     m[1] = prng.get<osuCrypto::block>();
-    // }
-    // auto fut2 = ot.send_batch(128, msgs2);
-    // co_await await_future(io, fut2);
-
     MPCContext ctx(Role::P0, self, &peer, nullptr);
 
     AShare<uint64_t> a(5, &ctx), b(7, &ctx);
@@ -171,49 +88,6 @@ awaitable<void> run_p1(io_context& io) {
     tcp::socket peer_sock = co_await connect_with_retry(io, "127.0.0.1", 9100);
     NetPeer peer(Role::P0, std::move(peer_sock));
 
-    tcp::socket ot_sock = co_await connect_with_retry(io, "127.0.0.1", 12000);
-    OTManager ot(std::move(ot_sock));
-
-    // // OT receiver functions usage
-    
-    std::vector<long long> timings;
-    osuCrypto::PRNG prng(osuCrypto::sysRandomSeed());
-    for (int iter = 0; iter < NUM_ITERS; iter++) {
-        osuCrypto::BitVector choices(128);
-        choices.randomize(prng);
-        std::vector<osuCrypto::block> outputs(128);
-
-        auto start = std::chrono::high_resolution_clock::now();
-
-        auto fut1 = ot.recv_batch(128, choices, outputs);  
-        outputs = co_await await_future(io, fut1);
-
-        auto end = std::chrono::high_resolution_clock::now();
-
-        long long us = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-
-        if (iter >= WARMUP) timings.push_back(us);
-    }
-    long long sum = 0, mn = LLONG_MAX, mx = 0;
-    for (auto t : timings) {
-        sum += t;
-        mn = std::min(mn, t);
-        mx = std::max(mx, t);
-    }
-
-    std::cout << "[P1] OT Benchmark:\n";
-    std::cout << "Avg: " << (sum / timings.size()) << " us\n";
-    std::cout << "Min: " << mn << " us\n";
-    std::cout << "Max: " << mx << " us\n";
-    std::cout << "Time per OT: "
-          << (sum / timings.size()) / 128.0
-          << " us\n";
-    // osuCrypto::BitVector choices2(128);
-    // choices.randomize(prng);
-    // std::vector<osuCrypto::block> outputs2(128);
-    // auto fut2 = ot.recv_batch(128, choices2, outputs2);
-    // co_await await_future(io, fut2);
-
     MPCContext ctx(Role::P1, self, &peer, nullptr);
 
     AShare<uint64_t> a(5, &ctx), b(7, &ctx);
@@ -234,7 +108,7 @@ awaitable<void> run_p1(io_context& io) {
 // -----------------------------------------
 int main(int argc, char** argv) {
     if (argc != 2) {
-        std::cerr << "Usage: ./mpcops_test <p0|p1|p2>\n";
+        std::cerr << "Usage: ./mpc_async <p0|p1|p2>\n";
         return 1;
     }
 
